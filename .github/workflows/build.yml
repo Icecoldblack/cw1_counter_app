@@ -1,0 +1,60 @@
+name: Analyze, test and build release APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unpack project archive (first upload only)
+        run: |
+          if [ -f project.zip ]; then
+            unzip -o project.zip
+            rm project.zip
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android platform project (if missing)
+        run: |
+          if [ ! -d android ]; then
+            flutter create . --project-name cw1_counter_app --org edu.gsu.unehikhuere --platforms android
+            sed -i 's/android:label="cw1_counter_app"/android:label="CW1 Counter"/' android/app/src/main/AndroidManifest.xml
+          fi
+
+      - run: flutter --version
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter build apk --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Commit unpacked and generated project files
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "Unpack project and add generated Android platform files [skip ci]"
+            git push
+          fi
